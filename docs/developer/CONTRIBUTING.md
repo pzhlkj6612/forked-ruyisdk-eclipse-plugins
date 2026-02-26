@@ -14,7 +14,7 @@
 - Create a new branch from "main".
 - Coding.
 - Testing changes by using "Run As Eclipse Application" in Eclipse SDK.
-- Building the update site by running `./mvnw clean verify` before creating PRs. You can check built files under the "sites/repository/target/repository/" directory.
+- Building the update site by running `JAVA_HOME=/path/to/jdk-21 ./mvnw clean verify` (or equivalent Java 21 setup) before creating PRs. You can check built files under the "sites/repository/target/repository/" directory.
 
 ## Notes
 
