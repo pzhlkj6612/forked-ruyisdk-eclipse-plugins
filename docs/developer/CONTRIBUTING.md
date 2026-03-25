@@ -6,7 +6,7 @@
 - Maven 3.9.9 or newer, but not Maven 4. You may need to add mirror sites to speedup download.
 - Git 2.23 or newer.
 - The latest Eclipse SDK from https://download.eclipse.org/eclipse/downloads/ .
-- Install M2E (m2eclipse, Eclipse Maven Integration) SDK. See https://projects.eclipse.org/projects/technology.m2e .
+- Install "M2E - Complete Development Kit" from m2eclipse for Maven integration in Eclipse. See https://projects.eclipse.org/projects/technology.m2e .
 
 ## Steps
 
