@@ -90,7 +90,11 @@ jobs:
           set -o pipefail
 
           echo "::notice:: Now, remove the existing release of the tag '$ver_num' in 60 seconds if this workflow run is triggered by creating releases on GitHub Web UI."
-          sleep 60
+          # https://cli.github.com/manual/gh_release
+          while gh release view 'continuous'; do
+            echo "::notice::   the release '$ver_num' is still there"
+            sleep 5
+          done
 
           # "0.1.0-SNAPSHOT"
           current_ver="$(./mvnw help:evaluate -Dexpression=project.version -q -DforceStdout)"
