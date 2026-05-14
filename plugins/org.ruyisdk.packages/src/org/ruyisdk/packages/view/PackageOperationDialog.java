@@ -112,6 +112,15 @@ public class PackageOperationDialog extends Dialog {
     }
 
     @Override
+    protected void handleShellCloseEvent() {
+        if (viewModel.isRunning()) {
+            viewModel.abort();
+            return;
+        }
+        super.handleShellCloseEvent();
+    }
+
+    @Override
     public boolean close() {
         if (viewModel != null && vmListener != null) {
             viewModel.removePropertyChangeListener(vmListener);

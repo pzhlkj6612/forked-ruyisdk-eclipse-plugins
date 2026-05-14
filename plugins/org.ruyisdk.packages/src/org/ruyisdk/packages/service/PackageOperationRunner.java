@@ -3,6 +3,7 @@ package org.ruyisdk.packages.service;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import org.eclipse.core.runtime.IProgressMonitor;
 import org.ruyisdk.packages.model.PackageOperation;
 import org.ruyisdk.ruyi.services.RuyiCli;
 
@@ -24,16 +25,19 @@ public class PackageOperationRunner {
          *
          * @param op the operation to execute
          * @param lineCallback called for each line of process output
+         * @param cancelFlag supplier returning {@code true} when cancellation has been requested
          */
-        void execute(PackageOperation op, Consumer<String> lineCallback);
+        void execute(PackageOperation op, Consumer<String> lineCallback,
+                BooleanSupplier cancelFlag);
     }
 
     /** Default installer that delegates to {@link RuyiCli}. */
-    public static final PackageInstaller DEFAULT_INSTALLER = (op, lineCallback) -> {
+    public static final PackageInstaller DEFAULT_INSTALLER = (op, lineCallback, cancelFlag) -> {
+        final var monitor = createCancelAwareMonitor(cancelFlag);
         if (op.uninstall()) {
-            RuyiCli.uninstallPackageStreaming(op.packageRef(), true, lineCallback, null);
+            RuyiCli.uninstallPackageStreaming(op.packageRef(), true, lineCallback, monitor);
         } else {
-            RuyiCli.installPackageStreaming(op.packageRef(), lineCallback, null);
+            RuyiCli.installPackageStreaming(op.packageRef(), lineCallback, monitor);
         }
     };
 
@@ -75,8 +79,8 @@ public class PackageOperationRunner {
     }
 
     /**
-     * Runs all operations in order. Checks {@code cancelFlag} between operations; a running
-     * operation is not interrupted.
+     * Runs all operations in order. Checks {@code cancelFlag} between operations and also passes it
+     * to the installer so a running operation may be interrupted by the underlying executor.
      *
      * @param operations the operations to execute
      * @param callback progress callback
@@ -92,12 +96,46 @@ public class PackageOperationRunner {
             callback.onStepStart(i, operations.size(), op);
 
             try {
-                installer.execute(op, callback::onOutputLine);
+                installer.execute(op, callback::onOutputLine, cancelFlag);
                 callback.onStepDone(i);
             } catch (Exception e) {
+                if (cancelFlag.getAsBoolean()) {
+                    break;
+                }
                 callback.onStepFailed(i, e.toString());
             }
         }
         callback.onAllFinished(cancelFlag.getAsBoolean());
+    }
+
+    /** Decoupling of cancellation state from Eclipse API. */
+    private static IProgressMonitor createCancelAwareMonitor(BooleanSupplier cancelFlag) {
+        return new IProgressMonitor() {
+            @Override
+            public void beginTask(String name, int totalWork) {}
+
+            @Override
+            public void done() {}
+
+            @Override
+            public void internalWorked(double work) {}
+
+            @Override
+            public boolean isCanceled() {
+                return cancelFlag.getAsBoolean();
+            }
+
+            @Override
+            public void setCanceled(boolean value) {}
+
+            @Override
+            public void setTaskName(String name) {}
+
+            @Override
+            public void subTask(String name) {}
+
+            @Override
+            public void worked(int work) {}
+        };
     }
 }

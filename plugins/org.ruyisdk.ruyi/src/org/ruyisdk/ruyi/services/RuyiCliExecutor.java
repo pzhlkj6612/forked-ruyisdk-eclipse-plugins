@@ -29,6 +29,7 @@ public final class RuyiCliExecutor {
 
     private static final PluginLogger LOGGER = Activator.getLogger();
     private static final long WAIT_SLICE_MILLIS = 100L;
+    private static final long HARD_KILL_DELAY_MILLIS = 1500L;
     private static final long OUTPUT_JOIN_TIMEOUT_MILLIS = 500L;
     private static final String[] LOCALE_ENV_KEYS = {"LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"};
     private static final String DEFAULT_LOCALE = "en_US.UTF-8";
@@ -138,7 +139,9 @@ public final class RuyiCliExecutor {
 
         try {
             process.destroy();
-            if (!process.waitFor(WAIT_SLICE_MILLIS, TimeUnit.MILLISECONDS) && process.isAlive()) {
+            if (!process.waitFor(HARD_KILL_DELAY_MILLIS, TimeUnit.MILLISECONDS)
+                    && process.isAlive()) {
+                LOGGER.logInfo("[RuyiCliExecutor] forcibly terminating ruyi process");
                 process.destroyForcibly();
                 process.waitFor();
             }

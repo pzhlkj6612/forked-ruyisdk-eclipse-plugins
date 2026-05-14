@@ -107,7 +107,10 @@ public class PackageOperationViewModel extends BaseViewModel {
         job.schedule();
     }
 
-    /** Request abort. The current operation will finish before stopping. */
+    /**
+     * Request abort. Active operation should be cancelled via monitor propagation within the job to
+     * ruyi process.
+     */
     public void abort() {
         if (job != null) {
             job.cancel();

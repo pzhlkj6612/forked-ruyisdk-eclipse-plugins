@@ -28,7 +28,7 @@ public class PackageOperationRunnerTest {
         List<String> events = new ArrayList<>();
 
         // Installer stub that emits lines and succeeds
-        PackageOperationRunner.PackageInstaller installer = (op, lineCallback) -> {
+        PackageOperationRunner.PackageInstaller installer = (op, lineCallback, cancelFlag) -> {
             lineCallback.accept(op.packageRef() + "-line1");
             lineCallback.accept(op.packageRef() + "-line2");
         };
@@ -60,7 +60,7 @@ public class PackageOperationRunnerTest {
     public void failingOperation_triggersOnStepFailedAndContinues() {
         List<String> events = new ArrayList<>();
 
-        PackageOperationRunner.PackageInstaller installer = (op, lineCallback) -> {
+        PackageOperationRunner.PackageInstaller installer = (op, lineCallback, cancelFlag) -> {
             lineCallback.accept("output");
             if ("bad(1.0)".equals(op.packageRef())) {
                 throw RuyiCliException.executionFailed("install bad(1.0)", 1, "install failed");
@@ -102,7 +102,7 @@ public class PackageOperationRunnerTest {
         List<String> events = new ArrayList<>();
         AtomicBoolean cancelFlag = new AtomicBoolean(false);
 
-        PackageOperationRunner.PackageInstaller installer = (op, lineCallback) -> {
+        PackageOperationRunner.PackageInstaller installer = (op, lineCallback, isCancelled) -> {
             lineCallback.accept("output");
         };
 
@@ -138,6 +138,37 @@ public class PackageOperationRunnerTest {
         assertEquals("onAllFinished:true", events.get(events.size() - 1));
     }
 
+    @Test
+    public void cancelledDuringRunningStep_stopsWithoutStepFailed() {
+        List<String> events = new ArrayList<>();
+        // step1 will run and switch this to true
+        AtomicBoolean cancelFlag = new AtomicBoolean(false);
+
+        PackageOperationRunner.PackageInstaller installer = (op, lineCallback, isCancelled) -> {
+            lineCallback.accept("output");
+            cancelFlag.set(true);
+            if (isCancelled.getAsBoolean()) {
+                throw RuyiCliException.cancelled();
+            }
+        };
+
+        PackageOperationRunner runner = new PackageOperationRunner(installer);
+
+        List<PackageOperation> ops = List.of(
+                        new PackageOperation("step1(1.0)", false),
+                        new PackageOperation("step2(1.0)", false));
+
+        runner.run(ops, new RecordingCallback(events), cancelFlag::get);
+
+        assertTrue(events.contains("onStepStart:0:2:step1(1.0)"));
+        for (String e : events) {
+            assertFalse("step2 should not appear: " + e, e.contains("step2"));
+            assertFalse("cancel should not be reported as failure: " + e,
+                    e.startsWith("onStepFailed:"));
+        }
+        assertEquals("onAllFinished:true", events.get(events.size() - 1));
+    }
+
     // ------------------------------------------------------------------
     // Uninstall operation dispatches correctly
     // ------------------------------------------------------------------
@@ -147,7 +178,7 @@ public class PackageOperationRunnerTest {
         List<String> events = new ArrayList<>();
         List<PackageOperation> receivedOps = new ArrayList<>();
 
-        PackageOperationRunner.PackageInstaller installer = (op, lineCallback) -> {
+        PackageOperationRunner.PackageInstaller installer = (op, lineCallback, cancelFlag) -> {
             receivedOps.add(op);
         };
 
