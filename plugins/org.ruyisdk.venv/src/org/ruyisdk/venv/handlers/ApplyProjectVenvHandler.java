@@ -44,7 +44,7 @@ public class ApplyProjectVenvHandler extends AbstractHandler {
                                 .toApplyVenvDisplayText((Venv) element);
                     }
                 });
-        dialog.setTitle("Apply venv");
+        dialog.setTitle("Apply Virtual environment (Venv)");
         dialog.setMessage(
                 "Select a virtual environment to apply to project \"" + project.getName() + "\".");
         dialog.setElements(candidates.toArray(Venv[]::new));
@@ -59,7 +59,7 @@ public class ApplyProjectVenvHandler extends AbstractHandler {
 
         LOGGER.logInfo("Applied venv from project context menu: project=" + projectPath + ", venv="
                 + selectedVenv.getPath());
-        MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Apply venv",
+        MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Apply Venv",
                 result.getMessage());
         return null;
     }

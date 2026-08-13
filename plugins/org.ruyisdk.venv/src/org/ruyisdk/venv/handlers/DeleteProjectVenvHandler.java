@@ -40,7 +40,7 @@ public class DeleteProjectVenvHandler extends AbstractHandler {
         final var candidates = viewModel.listProjectVenvs(projectPath);
 
         if (candidates.isEmpty()) {
-            MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Delete venv",
+            MessageDialog.openInformation(HandlerUtil.getActiveShell(event), "Delete Venv",
                     String.format("No virtual environments found under project \"%s\".",
                             project.getName()));
             return null;
@@ -53,7 +53,7 @@ public class DeleteProjectVenvHandler extends AbstractHandler {
                         return VenvListViewModel.getDisplayPath((Venv) element);
                     }
                 });
-        dialog.setTitle("Delete venv");
+        dialog.setTitle("Delete Virtual environment (Venv)");
         dialog.setMessage(String.format(
                 "Select virtual environment(s) to delete from project \"%s\":", project.getName()));
         dialog.setElements(candidates.toArray(Venv[]::new));
@@ -88,7 +88,7 @@ public class DeleteProjectVenvHandler extends AbstractHandler {
         }
 
         final var confirmed = MessageDialog.openConfirm(HandlerUtil.getActiveShell(event),
-                "Delete virtual environment", message);
+                "Delete Venv", message);
         if (!confirmed) {
             return null;
         }

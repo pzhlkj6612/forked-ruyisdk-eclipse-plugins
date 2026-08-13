@@ -202,7 +202,7 @@ public class VenvView extends ViewPart {
         deleteButton.setLayoutData(new GridData(SWT.BEGINNING, SWT.CENTER, false, false));
 
         newButton = new Button(buttonBar, SWT.PUSH);
-        newButton.setText("New virtual environment...");
+        newButton.setText("New...");
         newButton.setLayoutData(new GridData(SWT.END, SWT.CENTER, true, false));
     }
 
@@ -282,8 +282,8 @@ public class VenvView extends ViewPart {
                         Continue?""", String.join("\n", venvPaths));
                 }
 
-                final var confirmDeletion = MessageDialog.openConfirm(container.getShell(),
-                        "Delete virtual environment", message);
+                final var confirmDeletion =
+                        MessageDialog.openConfirm(container.getShell(), "Delete Venv", message);
                 if (!confirmDeletion) {
                     return;
                 }
