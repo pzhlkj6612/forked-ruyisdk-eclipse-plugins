@@ -305,7 +305,7 @@ public class VenvWizardViewModel {
             allToolchains.addAll(data.toolchains());
             allEmulators.clear();
             allEmulators.addAll(data.emulators());
-            filterPackagesBySelectedProfile();
+            repopulatePackagesByProfile();
             recomputeDerivedState();
         };
         // Observable lists may only be mutated on their own realm.
@@ -382,10 +382,12 @@ public class VenvWizardViewModel {
     }
 
     /**
-     * Filters toolchains and emulators to match the selected profile's quirks. When no profile is
-     * selected, all packages are shown.
+     * Rebuilds the toolchain and emulator lists to match the selected profile's quirks; when no
+     * profile is selected, all packages are shown. Then resets the toolchain, sysroot, and emulator
+     * selections since the lists changed. The selection setters also empty the toolchain and
+     * emulator version lists.
      */
-    private void filterPackagesBySelectedProfile() {
+    private void repopulatePackagesByProfile() {
         if (selectedProfileIndex < 0 || selectedProfileIndex >= profiles.size()) {
             toolchains.clear();
             toolchains.addAll(allToolchains);
@@ -409,7 +411,8 @@ public class VenvWizardViewModel {
             }
         }
 
-        // Reset selections since the lists changed
+        // Reset any other selections since the data changed. Version lists will be emptied by the
+        // selection setters.
         setSelectedToolchainIndex(-1);
         setSelectedSysrootPackageIndex(-1);
         setSelectedEmulatorIndex(-1);
@@ -587,7 +590,7 @@ public class VenvWizardViewModel {
         this.selectedProfileIndex = index;
         pcs.firePropertyChange("selectedProfileIndex", old, this.selectedProfileIndex);
         applyDefaultVenvNameForSelectedProfile();
-        filterPackagesBySelectedProfile();
+        repopulatePackagesByProfile();
         recomputeDerivedState();
     }
 
@@ -627,15 +630,18 @@ public class VenvWizardViewModel {
         return selectedToolchainIndex;
     }
 
-    /** Sets the selected toolchain index. */
+    /** Sets the selected toolchain index and updates the version list. */
     public void setSelectedToolchainIndex(int index) {
         final var old = this.selectedToolchainIndex;
         this.selectedToolchainIndex = index;
         pcs.firePropertyChange("selectedToolchainIndex", old, this.selectedToolchainIndex);
+
+        // If both values are -1, we don't need to update the already empty version list.
         if (old != index) {
             updateToolchainVersions();
             setSelectedToolchainVersionIndex(-1);
         }
+
         recomputeDerivedState();
     }
 
@@ -678,15 +684,18 @@ public class VenvWizardViewModel {
         return selectedEmulatorIndex;
     }
 
-    /** Sets the selected emulator index. */
+    /** Sets the selected emulator index and updates the version list. */
     public void setSelectedEmulatorIndex(int index) {
         final var old = this.selectedEmulatorIndex;
         this.selectedEmulatorIndex = index;
         pcs.firePropertyChange("selectedEmulatorIndex", old, this.selectedEmulatorIndex);
+
+        // If both values are -1, we don't need to update the already empty version list.
         if (old != index) {
             updateEmulatorVersions();
             setSelectedEmulatorVersionIndex(-1);
         }
+
         recomputeDerivedState();
     }
 
