@@ -155,7 +155,8 @@ public class PackageExplorerView extends ViewPart {
             @Override
             public void run() {
                 if (!Program.launch(viewModel.getPackageDownloadDir())) {
-                    MessageDialog.openError(Display.getDefault().getActiveShell(), "Error",
+                    MessageDialog.openError(Display.getDefault().getActiveShell(),
+                            "Package Explorer",
                             "Cannot open compressed package download directory.");
                 }
             }
@@ -169,8 +170,8 @@ public class PackageExplorerView extends ViewPart {
             @Override
             public void run() {
                 if (!Program.launch(viewModel.getImagesDownloadDir())) {
-                    MessageDialog.openError(Display.getDefault().getActiveShell(), "Error",
-                            "Cannot open image files download directory.");
+                    MessageDialog.openError(Display.getDefault().getActiveShell(),
+                            "Package Explorer", "Cannot open image files download directory.");
                 }
             }
         };
@@ -208,15 +209,15 @@ public class PackageExplorerView extends ViewPart {
     private void performPackageOperations() {
         final var operations = viewModel.collectPendingOperations();
         if (operations.isEmpty()) {
-            ScrollableMessageDialog.openInformation(Display.getDefault().getActiveShell(), "Info",
-                    "No changes to apply. Check packages to install, "
-                            + "or uncheck installed packages to uninstall.");
+            MessageDialog.openInformation(Display.getDefault().getActiveShell(),
+                    "No Pending Changes",
+                    "Check packages to install, or uncheck installed packages to uninstall.");
             return;
         }
 
         final var message = viewModel.getConfirmationMessage(operations);
         if (!ScrollableMessageDialog.openConfirm(Display.getDefault().getActiveShell(),
-                "Confirm Changes", message)) {
+                "Pending Changes", message)) {
             return;
         }
 

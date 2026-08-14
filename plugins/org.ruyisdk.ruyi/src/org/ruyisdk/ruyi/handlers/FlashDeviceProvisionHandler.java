@@ -27,7 +27,7 @@ public class FlashDeviceProvisionHandler extends AbstractHandler {
             LOGGER.logError(msg, e);
             final var shell = HandlerUtil.getActiveShell(event);
             if (shell != null) {
-                MessageDialog.openError(shell, msg, String.format("""
+                MessageDialog.openError(shell, "Failed to Launch", String.format("""
                     Unable to start built-in terminal for 'ruyi device provision'.
 
                     %s""", e.getMessage()));
