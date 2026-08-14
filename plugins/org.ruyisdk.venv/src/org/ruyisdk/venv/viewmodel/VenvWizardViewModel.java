@@ -12,6 +12,10 @@ import java.util.List;
 import java.util.Set;
 import org.eclipse.core.databinding.observable.list.IObservableList;
 import org.eclipse.core.databinding.observable.list.WritableList;
+import org.eclipse.core.runtime.IStatus;
+import org.eclipse.core.runtime.Status;
+import org.eclipse.core.runtime.jobs.Job;
+import org.eclipse.swt.widgets.Display;
 import org.ruyisdk.ruyi.services.RuyiCliException;
 import org.ruyisdk.venv.model.Emulator;
 import org.ruyisdk.venv.model.Profile;
@@ -31,19 +35,31 @@ public class VenvWizardViewModel {
     private boolean defaultSysrootOptionAvailable;
     private String summaryText = "";
 
-    private final List<Profile> profiles = new ArrayList<>();
+    private boolean dataLoading;
+    private String loadingMessage = "";
+    private String loadingErrorMessage = "";
+    private boolean dataLoadStarted;
+
+    private final IObservableList<Profile> profiles =
+            new WritableList<>(new ArrayList<>(), Profile.class);
     private int selectedProfileIndex = -1;
 
-    private final List<Toolchain> toolchains = new ArrayList<>();
+    private final IObservableList<Toolchain> toolchains =
+            new WritableList<>(new ArrayList<>(), Toolchain.class);
     private final List<Toolchain> allToolchains = new ArrayList<>();
     private int selectedToolchainIndex = -1;
     private int selectedToolchainVersionIndex = -1;
+    private final IObservableList<String> toolchainVersions =
+            new WritableList<>(new ArrayList<>(), String.class);
 
-    private final List<Emulator> emulators = new ArrayList<>();
+    private final IObservableList<Emulator> emulators =
+            new WritableList<>(new ArrayList<>(), Emulator.class);
     private final List<Emulator> allEmulators = new ArrayList<>();
     private int selectedEmulatorIndex = -1;
     private int selectedEmulatorVersionIndex = -1;
     private boolean emulatorEnabled = false;
+    private final IObservableList<String> emulatorVersions =
+            new WritableList<>(new ArrayList<>(), String.class);
 
     private SysrootOption sysrootOption = SysrootOption.DEFAULT_SYSROOT;
     private int selectedSysrootPackageIndex = -1;
@@ -245,35 +261,123 @@ public class VenvWizardViewModel {
         return sb.toString();
     }
 
-    private void loadLists() {
-        profiles.clear();
-        allToolchains.clear();
-        allEmulators.clear();
-        toolchains.clear();
-        emulators.clear();
+    /** Fetched package data, transferred from the background job to the UI thread. */
+    private record FetchedData(List<Profile> profiles, List<Toolchain> toolchains,
+            List<Emulator> emulators) {
+    }
 
+    private FetchedData fetchData() {
+        final var fetchedProfiles = new ArrayList<Profile>();
         final var profileInfos = service.listProfiles();
         if (profileInfos != null) {
             for (final var profileInfo : profileInfos) {
-                profiles.add(new Profile(profileInfo.getName(), profileInfo.getQuirks()));
+                fetchedProfiles.add(new Profile(profileInfo.getName(), profileInfo.getQuirks()));
             }
         }
 
+        final var fetchedToolchains = new ArrayList<Toolchain>();
         final var toolchainInfos = service.listToolchains();
         if (toolchainInfos != null) {
             for (final var toolchainInfo : toolchainInfos) {
-                allToolchains
+                fetchedToolchains
                         .add(new Toolchain(toolchainInfo.getName(), toolchainInfo.getVersions(),
                                 toolchainInfo.getQuirks(), toolchainInfo.hasIncludedSysroot()));
             }
         }
 
+        final var fetchedEmulators = new ArrayList<Emulator>();
         final var emulatorInfos = service.listEmulators();
         if (emulatorInfos != null) {
             for (final var emulatorInfo : emulatorInfos) {
-                allEmulators.add(new Emulator(emulatorInfo.getName(), emulatorInfo.getVersions(),
-                        emulatorInfo.getQuirks()));
+                fetchedEmulators.add(new Emulator(emulatorInfo.getName(),
+                        emulatorInfo.getVersions(), emulatorInfo.getQuirks()));
             }
+        }
+
+        return new FetchedData(fetchedProfiles, fetchedToolchains, fetchedEmulators);
+    }
+
+    private void applyFetchedData(FetchedData data) {
+        final Runnable update = () -> {
+            profiles.clear();
+            profiles.addAll(data.profiles());
+            allToolchains.clear();
+            allToolchains.addAll(data.toolchains());
+            allEmulators.clear();
+            allEmulators.addAll(data.emulators());
+            filterPackagesBySelectedProfile();
+            recomputeDerivedState();
+        };
+        // Observable lists may only be mutated on their own realm.
+        if (profiles.getRealm().isCurrent()) {
+            update.run();
+        } else {
+            profiles.getRealm().asyncExec(update);
+        }
+    }
+
+    /** Loads package lists from the Ruyi CLI and refreshes all view model data. */
+    public void loadAll() {
+        applyFetchedData(fetchData());
+    }
+
+    /**
+     * Loads package lists from the Ruyi CLI asynchronously, keeping the UI responsive. Progress and
+     * failures are reported through the {@code dataLoading}, {@code loadingMessage} and
+     * {@code loadingErrorMessage} properties. Does nothing if a load is already running.
+     */
+    public void loadAllAsync() {
+        if (dataLoading) {
+            return;
+        }
+        dataLoadStarted = true;
+
+        runOnUiThread(() -> {
+            setLoadingErrorMessage("");
+            setDataLoading(true);
+            setLoadingMessage("Loading package data...");
+        });
+
+        final var job = Job.create("Loading package data", monitor -> {
+            if (monitor.isCanceled()) {
+                runOnUiThread(() -> {
+                    setDataLoading(false);
+                    setLoadingMessage("Loading cancelled.");
+                });
+                return Status.CANCEL_STATUS;
+            }
+            try {
+                final var fetched = fetchData();
+                runOnUiThread(() -> {
+                    applyFetchedData(fetched);
+                    setDataLoading(false);
+                    setLoadingMessage("");
+                    setLoadingErrorMessage("");
+                });
+                return Status.OK_STATUS;
+            } catch (Exception e) {
+                final var message = e.getMessage() == null ? e.toString() : e.getMessage();
+                runOnUiThread(() -> {
+                    setDataLoading(false);
+                    setLoadingMessage("");
+                    setLoadingErrorMessage(message);
+                });
+                return new Status(IStatus.ERROR, "org.ruyisdk.venv", "Failed to load package data",
+                        e);
+            }
+        });
+        job.schedule();
+    }
+
+    private static void runOnUiThread(Runnable runnable) {
+        final var display = Display.getDefault();
+        if (display == null || display.isDisposed()) {
+            return;
+        }
+        if (display.getThread() == Thread.currentThread()) {
+            runnable.run();
+        } else {
+            display.asyncExec(runnable);
         }
     }
 
@@ -320,13 +424,6 @@ public class VenvWizardViewModel {
             return providedByPackage.isEmpty();
         }
         return providedByPackage.containsAll(neededByProfile);
-    }
-
-    /** Loads package lists from the Ruyi CLI and refreshes all view model data. */
-    public void loadAll() {
-        loadLists();
-        filterPackagesBySelectedProfile();
-        recomputeDerivedState();
     }
 
     private void installToolchain(String name, String version) {
@@ -474,8 +571,8 @@ public class VenvWizardViewModel {
                 emulatorVersion);
     }
 
-    /** Returns available profiles. */
-    public List<Profile> getProfiles() {
+    /** Returns available profiles as an observable list. */
+    public IObservableList<Profile> getProfiles() {
         return profiles;
     }
 
@@ -520,8 +617,8 @@ public class VenvWizardViewModel {
         setVenvNameInternal(defaultName, false);
     }
 
-    /** Returns available toolchains. */
-    public List<Toolchain> getToolchains() {
+    /** Returns available toolchains as an observable list. */
+    public IObservableList<Toolchain> getToolchains() {
         return toolchains;
     }
 
@@ -536,9 +633,25 @@ public class VenvWizardViewModel {
         this.selectedToolchainIndex = index;
         pcs.firePropertyChange("selectedToolchainIndex", old, this.selectedToolchainIndex);
         if (old != index) {
+            updateToolchainVersions();
             setSelectedToolchainVersionIndex(-1);
         }
         recomputeDerivedState();
+    }
+
+    private void updateToolchainVersions() {
+        toolchainVersions.clear();
+        if (selectedToolchainIndex >= 0 && selectedToolchainIndex < toolchains.size()) {
+            final var versions = toolchains.get(selectedToolchainIndex).getVersions();
+            if (versions != null) {
+                toolchainVersions.addAll(versions);
+            }
+        }
+    }
+
+    /** Returns the versions of the selected toolchain as an observable list. */
+    public IObservableList<String> getToolchainVersions() {
+        return toolchainVersions;
     }
 
     /** Returns the selected toolchain version index. */
@@ -555,8 +668,8 @@ public class VenvWizardViewModel {
         recomputeDerivedState();
     }
 
-    /** Returns available emulators. */
-    public List<Emulator> getEmulators() {
+    /** Returns available emulators as an observable list. */
+    public IObservableList<Emulator> getEmulators() {
         return emulators;
     }
 
@@ -571,9 +684,25 @@ public class VenvWizardViewModel {
         this.selectedEmulatorIndex = index;
         pcs.firePropertyChange("selectedEmulatorIndex", old, this.selectedEmulatorIndex);
         if (old != index) {
+            updateEmulatorVersions();
             setSelectedEmulatorVersionIndex(-1);
         }
         recomputeDerivedState();
+    }
+
+    private void updateEmulatorVersions() {
+        emulatorVersions.clear();
+        if (selectedEmulatorIndex >= 0 && selectedEmulatorIndex < emulators.size()) {
+            final var versions = emulators.get(selectedEmulatorIndex).getVersions();
+            if (versions != null) {
+                emulatorVersions.addAll(versions);
+            }
+        }
+    }
+
+    /** Returns the versions of the selected emulator as an observable list. */
+    public IObservableList<String> getEmulatorVersions() {
+        return emulatorVersions;
     }
 
     /** Returns the selected emulator version index. */
@@ -791,6 +920,47 @@ public class VenvWizardViewModel {
     /** Returns whether the configuration page is complete. */
     public boolean isConfigurationPageComplete() {
         return configurationPageComplete;
+    }
+
+    /** Returns whether package data is currently being loaded. */
+    public boolean isDataLoading() {
+        return dataLoading;
+    }
+
+    /** Sets whether package data is currently being loaded. */
+    public void setDataLoading(boolean loading) {
+        final var old = this.dataLoading;
+        this.dataLoading = loading;
+        pcs.firePropertyChange("dataLoading", old, this.dataLoading);
+    }
+
+    /** Returns the current loading progress message. */
+    public String getLoadingMessage() {
+        return loadingMessage;
+    }
+
+    /** Sets the current loading progress message. */
+    public void setLoadingMessage(String message) {
+        final var old = this.loadingMessage;
+        this.loadingMessage = message == null ? "" : message;
+        pcs.firePropertyChange("loadingMessage", old, this.loadingMessage);
+    }
+
+    /** Returns the last loading error message, or an empty string if none. */
+    public String getLoadingErrorMessage() {
+        return loadingErrorMessage;
+    }
+
+    /** Sets the last loading error message. */
+    public void setLoadingErrorMessage(String message) {
+        final var old = this.loadingErrorMessage;
+        this.loadingErrorMessage = message == null ? "" : message;
+        pcs.firePropertyChange("loadingErrorMessage", old, this.loadingErrorMessage);
+    }
+
+    /** Returns whether asynchronous data loading has been started at least once. */
+    public boolean isDataLoadStarted() {
+        return dataLoadStarted;
     }
 
     /** Adds a property change listener. */

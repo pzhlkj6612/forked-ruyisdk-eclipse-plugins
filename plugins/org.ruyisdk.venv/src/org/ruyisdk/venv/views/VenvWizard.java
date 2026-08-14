@@ -14,6 +14,7 @@ import org.ruyisdk.venv.viewmodel.VenvWizardViewModel;
 public class VenvWizard extends Wizard {
     private final VenvWizardViewModel viewModel;
 
+    private WizardLoadingPage loadingPage;
     private WizardConfigPage configurationPage;
     private WizardLocationPage locationPage;
 
@@ -31,8 +32,8 @@ public class VenvWizard extends Wizard {
 
     @Override
     public void addPages() {
-        viewModel.loadAll();
-
+        loadingPage = new WizardLoadingPage(viewModel);
+        addPage(loadingPage);
         configurationPage = new WizardConfigPage(viewModel);
         addPage(configurationPage);
         locationPage = new WizardLocationPage(viewModel);
