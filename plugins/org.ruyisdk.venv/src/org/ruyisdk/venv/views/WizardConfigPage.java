@@ -1,19 +1,19 @@
 package org.ruyisdk.venv.views;
 
-import java.util.List;
 import org.eclipse.core.databinding.DataBindingContext;
 import org.eclipse.core.databinding.UpdateValueStrategy;
 import org.eclipse.core.databinding.beans.typed.BeanProperties;
 import org.eclipse.core.databinding.conversion.Converter;
 import org.eclipse.core.databinding.observable.value.SelectObservableValue;
 import org.eclipse.jface.databinding.swt.typed.WidgetProperties;
+import org.eclipse.jface.databinding.viewers.ObservableListContentProvider;
 import org.eclipse.jface.databinding.viewers.typed.ViewerProperties;
-import org.eclipse.jface.viewers.ArrayContentProvider;
 import org.eclipse.jface.viewers.ColumnLabelProvider;
 import org.eclipse.jface.viewers.TableViewer;
 import org.eclipse.jface.viewers.TableViewerColumn;
 import org.eclipse.jface.viewers.Viewer;
 import org.eclipse.jface.viewers.ViewerComparator;
+import org.eclipse.jface.wizard.IWizardPage;
 import org.eclipse.jface.wizard.WizardPage;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.SelectionAdapter;
@@ -73,6 +73,12 @@ public class WizardConfigPage extends WizardPage {
         this.viewModel = viewModel;
         setTitle("Venv Configuration");
         setDescription("Configure profile, toolchains and emulator options.");
+    }
+
+    @Override
+    public IWizardPage getPreviousPage() {
+        // The loading page is a transient first page; never go back to it.
+        return null;
     }
 
     @Override
@@ -226,7 +232,7 @@ public class WizardConfigPage extends WizardPage {
                 });
             }
 
-            profileTableViewer.setContentProvider(ArrayContentProvider.getInstance());
+            profileTableViewer.setContentProvider(new ObservableListContentProvider<Profile>());
 
             final var profileComparator = new ViewerComparator() {
                 private TableColumn sortColumn = nameColumn.getColumn();
@@ -319,7 +325,7 @@ public class WizardConfigPage extends WizardPage {
             tcVersions.setHeaderVisible(false);
             tcVersions.setLinesVisible(true);
 
-            toolchainNamesViewer.setContentProvider(ArrayContentProvider.getInstance());
+            toolchainNamesViewer.setContentProvider(new ObservableListContentProvider<Toolchain>());
             toolchainNamesViewer.setLabelProvider(new ColumnLabelProvider() {
                 @Override
                 public String getText(Object element) {
@@ -328,8 +334,9 @@ public class WizardConfigPage extends WizardPage {
             });
             toolchainNamesViewer.setInput(viewModel.getToolchains());
 
-            toolchainVersionsViewer.setContentProvider(ArrayContentProvider.getInstance());
+            toolchainVersionsViewer.setContentProvider(new ObservableListContentProvider<String>());
             toolchainVersionsViewer.setLabelProvider(new ColumnLabelProvider());
+            toolchainVersionsViewer.setInput(viewModel.getToolchainVersions());
         }
 
         // emulators
@@ -362,7 +369,7 @@ public class WizardConfigPage extends WizardPage {
             evData.widthHint = 300;
             emulatorVersions.setLayoutData(evData);
 
-            emulatorNamesViewer.setContentProvider(ArrayContentProvider.getInstance());
+            emulatorNamesViewer.setContentProvider(new ObservableListContentProvider<Emulator>());
             emulatorNamesViewer.setLabelProvider(new ColumnLabelProvider() {
                 @Override
                 public String getText(Object element) {
@@ -371,8 +378,9 @@ public class WizardConfigPage extends WizardPage {
             });
             emulatorNamesViewer.setInput(viewModel.getEmulators());
 
-            emulatorVersionsViewer.setContentProvider(ArrayContentProvider.getInstance());
+            emulatorVersionsViewer.setContentProvider(new ObservableListContentProvider<String>());
             emulatorVersionsViewer.setLabelProvider(new ColumnLabelProvider());
+            emulatorVersionsViewer.setInput(viewModel.getEmulatorVersions());
         }
 
         // sysroot
@@ -536,16 +544,6 @@ public class WizardConfigPage extends WizardPage {
                     });
             dbc.bindValue(toolchainSelection, toolchainIndexObservable, toolchainToIndex,
                     indexToToolchain);
-
-            toolchainIndexObservable.addValueChangeListener(e -> {
-                final var idx = viewModel.getSelectedToolchainIndex();
-                if (idx >= 0 && idx < viewModel.getToolchains().size()) {
-                    toolchainVersionsViewer
-                            .setInput(viewModel.getToolchains().get(idx).getVersions());
-                } else {
-                    toolchainVersionsViewer.setInput(List.of());
-                }
-            });
         }
 
         // toolchain versions
@@ -560,12 +558,8 @@ public class WizardConfigPage extends WizardPage {
                     .setConverter(new Converter<String, Integer>(String.class, Integer.class) {
                         @Override
                         public Integer convert(String fromObject) {
-                            final var idx = viewModel.getSelectedToolchainIndex();
-                            if (idx < 0 || idx >= viewModel.getToolchains().size()) {
-                                return Integer.valueOf(-1);
-                            }
-                            final var vers = viewModel.getToolchains().get(idx).getVersions();
-                            return Integer.valueOf(vers == null ? -1 : vers.indexOf(fromObject));
+                            return Integer
+                                    .valueOf(viewModel.getToolchainVersions().indexOf(fromObject));
                         }
                     });
             final var indexToToolchainVersion = new UpdateValueStrategy<Integer, String>();
@@ -573,15 +567,9 @@ public class WizardConfigPage extends WizardPage {
                     .setConverter(new Converter<Integer, String>(Integer.class, String.class) {
                         @Override
                         public String convert(Integer fromObject) {
-                            final var idx = viewModel.getSelectedToolchainIndex();
-                            if (idx < 0 || idx >= viewModel.getToolchains().size()) {
-                                return null;
-                            }
-                            final var vers = viewModel.getToolchains().get(idx).getVersions();
+                            final var vers = viewModel.getToolchainVersions();
                             final var verIdx = ((Integer) fromObject).intValue();
-                            return vers != null && verIdx >= 0 && verIdx < vers.size()
-                                    ? vers.get(verIdx)
-                                    : null;
+                            return verIdx >= 0 && verIdx < vers.size() ? vers.get(verIdx) : null;
                         }
                     });
             dbc.bindValue(toolchainVersionSelection, toolchainVersionIndexObservable,
@@ -633,16 +621,6 @@ public class WizardConfigPage extends WizardPage {
                     });
             dbc.bindValue(emulatorSelection, emulatorIndexObservable, emulatorToIndex,
                     indexToEmulator);
-
-            emulatorIndexObservable.addValueChangeListener(e -> {
-                final var idx = viewModel.getSelectedEmulatorIndex();
-                if (idx >= 0 && idx < viewModel.getEmulators().size()) {
-                    emulatorVersionsViewer
-                            .setInput(viewModel.getEmulators().get(idx).getVersions());
-                } else {
-                    emulatorVersionsViewer.setInput(List.of());
-                }
-            });
         }
 
         // emulator versions
@@ -657,12 +635,8 @@ public class WizardConfigPage extends WizardPage {
                     .setConverter(new Converter<String, Integer>(String.class, Integer.class) {
                         @Override
                         public Integer convert(String fromObject) {
-                            final var idx = viewModel.getSelectedEmulatorIndex();
-                            if (idx < 0 || idx >= viewModel.getEmulators().size()) {
-                                return Integer.valueOf(-1);
-                            }
-                            final var vers = viewModel.getEmulators().get(idx).getVersions();
-                            return Integer.valueOf(vers == null ? -1 : vers.indexOf(fromObject));
+                            return Integer
+                                    .valueOf(viewModel.getEmulatorVersions().indexOf(fromObject));
                         }
                     });
             final var indexToEmulatorVersion = new UpdateValueStrategy<Integer, String>();
@@ -670,26 +644,14 @@ public class WizardConfigPage extends WizardPage {
                     .setConverter(new Converter<Integer, String>(Integer.class, String.class) {
                         @Override
                         public String convert(Integer fromObject) {
-                            final var idx = viewModel.getSelectedEmulatorIndex();
-                            if (idx < 0 || idx >= viewModel.getEmulators().size()) {
-                                return null;
-                            }
-                            final var vers = viewModel.getEmulators().get(idx).getVersions();
+                            final var vers = viewModel.getEmulatorVersions();
                             final var verIdx = ((Integer) fromObject).intValue();
-                            return vers != null && verIdx >= 0 && verIdx < vers.size()
-                                    ? vers.get(verIdx)
-                                    : null;
+                            return verIdx >= 0 && verIdx < vers.size() ? vers.get(verIdx) : null;
                         }
                     });
             dbc.bindValue(emulatorVersionSelection, emulatorVersionIndexObservable,
                     emulatorVersionToIndex, indexToEmulatorVersion);
         }
-
-        // filter toolchains and emulators by quirks when profile changes
-        profileIndexObservable.addValueChangeListener(e -> {
-            toolchainNamesViewer.setInput(viewModel.getToolchains());
-            emulatorNamesViewer.setInput(viewModel.getEmulators());
-        });
 
         // sysroot
         {
@@ -791,11 +753,7 @@ public class WizardConfigPage extends WizardPage {
             return;
         }
 
+        // the observable lists fire change events that refresh the bound viewers
         viewModel.loadAll();
-        profileTableViewer.setInput(viewModel.getProfiles());
-        toolchainNamesViewer.setInput(viewModel.getToolchains());
-        toolchainVersionsViewer.setInput(List.of());
-        emulatorNamesViewer.setInput(viewModel.getEmulators());
-        emulatorVersionsViewer.setInput(List.of());
     }
 }
